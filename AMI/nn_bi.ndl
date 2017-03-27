@@ -1,0 +1,198 @@
+load=ndlMacroRes
+run=ndlCreateNetwork
+ndlMacroRes=[
+    #Macro Definitions
+    BN(outDim, inDim, x)
+    {
+        W = LearnableParameter(outDim, inDim, init = Gaussian, initValueScale = 1.13, initOnCPUOnly=true) 
+        t = Times(W, x)
+    }
+
+    DnnBNReLULayer(outDim, inDim, x)
+    {
+        W = LearnableParameter(outDim, inDim, init = Gaussian, initValueScale = 1.13, initOnCPUOnly=true) 
+        t = Times(W, x)
+        y = RectifiedLinear(t)
+    }
+    ResNetLayer(x, inputDim, hiddenDim)
+    {
+        W = LearnableParameter(hiddenDim, inputDim, init = Gaussian, initValueScale = 1) 
+        Z = DnnBNReLULayer(hiddenDim,inputDim, x)
+        J = Times(W, x)
+        L = Plus(Z,J)
+        C = RectifiedLinear(L);
+    }
+    ResNetLayer_Incr(x, inputDim, hiddenDim, bottleneckDim)
+    {
+
+        Z = BFF(x,hiddenDim,inputDim)
+        G = RectifiedLinear(Z);
+        Q = DnnBNReLULayer(bottleneckDim,hiddenDim,G);
+        V = BFF(Q,hiddenDim,bottleneckDim)
+        K = BN(hiddenDim, inputDim, x);
+        L = Plus(V,K)
+        C = RectifiedLinear(L);
+    }
+
+]
+
+ndlCreateNetwork=[
+    	#define basic i/o
+        FeatDim=$featDim$
+	labelDim=$labelDim$
+	hiddenDim1=128
+	hiddenDim2=256
+	hiddenDim3=512
+	hiddenDim4=1024
+	hiddenDim5=2048
+ BaseFeatDim=40
+
+	features=Input(FeatDim, tag=feature)
+	labels=Input(labelDim, tag=label)
+    
+        # define network
+         featNorm = MeanVarNorm(features)
+       
+        Ws = LearnableParameter(hiddenDim4, init = fixedvalue, initValueScale = 0) 
+        Ws2 = LearnableParameter(hiddenDim4, init = fixedvalue, initValueScale = 0) 
+
+        R1_1 = ResNetLayer_Incr(featNorm, baseFeatDim, hiddenDim5, hiddenDim5)
+        R1_2 = ResNetLayer_Incr(R1_1, hiddenDim5, hiddenDim5, hiddenDim1)
+
+        Layer_0 = ResNetLayer_Incr(R1_2, hiddenDim5, hiddenDim4, hiddenDim1)
+
+
+        Past_1 = FutureValue(hiddenDim4, Stat_1, timeStep=1, needGradient=true)
+        Past2_1 = Delay(hiddenDim4, Stat_1, delayTime=1, needGradient=true)
+        Stat_1 = BFF(Layer_0, hiddenDim4, hiddenDim4)
+        Dyna1_1 = DiagTimes(Ws, Past2_1)
+        Dyna2_1 = DiagTimes(Ws2, Past_1)
+        Dyna_1 = Plus(Dyna1_1,Dyna2_1)
+        Layer_1 = RectifiedLinear(Plus(Dyna_1, Stat_1))
+ 
+        past_2 = FutureValue(hiddenDim4, Stat_2, timeStep=2, needGradient=true)
+        Past2_2 = Delay(hiddenDim4, stat_2, delayTime=2, needGradient=true)
+        Stat_2 = BFF(layer_1, hiddenDim4, hiddenDim4)
+        Dyna1_2 = DiagTimes(Ws, Past2_2) 
+        Dyna2_2 = DiagTimes(Ws2, Past_2)
+        Dyna_2 = Plus(Dyna1_2,Dyna2_2)
+        Layer_2 = RectifiedLinear(Plus(Dyna_2, Stat_2))
+
+        Past_3 = FutureValue(hiddenDim4, Stat_3, timeStep=3, needGradient=true)
+        Past2_3 = Delay(hiddenDim4, stat_3, delayTime=3, needGradient=true)
+        Stat_3 = BFF(layer_2, hiddenDim4, hiddenDim4)
+        Dyna1_3 = DiagTimes(Ws, Past2_3)
+        Dyna2_3 = DiagTimes(Ws2, Past_3)
+        Dyna_3 = Plus(Dyna1_3,Dyna2_3)
+        Layer_3 = RectifiedLinear(Plus(Dyna_3, Stat_3))
+
+        Past_4 = FutureValue(hiddenDim4, Stat_4, timeStep=4, needGradient=true)
+        Past2_4 = Delay(hiddenDim4, stat_4, delayTime=4, needGradient=true)
+        Stat_4 = BFF(layer_3, hiddenDim4, hiddenDim4)
+        Dyna1_4 = DiagTimes(Ws, Past2_4)
+        Dyna2_4 = DiagTimes(Ws2, Past_4)
+        Dyna_4 = Plus(Dyna1_4,Dyna2_4)
+        Layer_4 = RectifiedLinear(Plus(Dyna_4, Stat_4))
+
+        Past_5 = FutureValue(hiddenDim4, Stat_5, timeStep=5, needGradient=true)
+        Past2_5 = Delay(hiddenDim4, stat_5, delayTime=5, needGradient=true)
+        Stat_5 = BFF(layer_4, hiddenDim4, hiddenDim4)
+        Dyna1_5 = DiagTimes(Ws, Past2_5)
+        Dyna2_5 = DiagTimes(Ws2, Past_5)
+        Dyna_5 = Plus(Dyna1_5,Dyna2_5)
+        Layer_5 = RectifiedLinear(Plus(Layer_0, Plus(Dyna_5, Stat_5)))
+
+
+
+        Past_6 = FutureValue(hiddenDim4, Stat_6, timeStep=6, needGradient=true)
+        Past2_6 = Delay(hiddenDim4, Stat_6, delayTime=6, needGradient=true)
+        Stat_6 = BFF(Layer_5, hiddenDim4, hiddenDim4)
+        Dyna1_6 = DiagTimes(Ws, Past2_6)
+        Dyna2_6 = DiagTimes(Ws2, Past_6)
+        Dyna_6 = Plus(Dyna1_6,Dyna2_6)
+        Layer_6 = RectifiedLinear(Plus(Dyna_6, Stat_6))
+ 
+        past_7 = FutureValue(hiddenDim4, Stat_7, timeStep=7, needGradient=true)
+        Past2_7 = Delay(hiddenDim4, stat_7, delayTime=7, needGradient=true)
+        Stat_7 = BFF(layer_6, hiddenDim4, hiddenDim4)
+        Dyna1_7 = DiagTimes(Ws, Past2_7) 
+        Dyna2_7 = DiagTimes(Ws2, Past_7)
+        Dyna_7 = Plus(Dyna1_7,Dyna2_7)
+        Layer_7 = RectifiedLinear(Plus(Dyna_7, Stat_7))
+
+        Past_8 = FutureValue(hiddenDim4, Stat_8, timeStep=8, needGradient=true)
+        Past2_8 = Delay(hiddenDim4, stat_8, delayTime=8, needGradient=true)
+        Stat_8 = BFF(layer_7, hiddenDim4, hiddenDim4)
+        Dyna1_8 = DiagTimes(Ws, Past2_8)
+        Dyna2_8 = DiagTimes(Ws2, Past_8)
+        Dyna_8 = Plus(Dyna1_8,Dyna2_8)
+        Layer_8 = RectifiedLinear(Plus(Dyna_8, Stat_8))
+
+        Past_9 = FutureValue(hiddenDim4, Stat_9, timeStep=9, needGradient=true)
+        Past2_9 = Delay(hiddenDim4, stat_9, delayTime=9, needGradient=true)
+        Stat_9 = BFF(layer_8, hiddenDim4, hiddenDim4)
+        Dyna1_9 = DiagTimes(Ws, Past2_9)
+        Dyna2_9 = DiagTimes(Ws2, Past_9)
+        Dyna_9 = Plus(Dyna1_9,Dyna2_9)
+        Layer_9 = RectifiedLinear(Plus(Dyna_9, Stat_9))
+
+        Past_10 = FutureValue(hiddenDim4, Stat_10, timeStep=10, needGradient=true)
+        Past2_10 = Delay(hiddenDim4, stat_10, delayTime=10, needGradient=true)
+        Stat_10 = BFF(layer_9, hiddenDim4, hiddenDim4)
+        Dyna1_10 = DiagTimes(Ws, Past2_10)
+        Dyna2_10 = DiagTimes(Ws2, Past_10)
+        Dyna_10 = Plus(Dyna1_10,Dyna2_10)
+        Layer_10 = RectifiedLinear(Plus(Layer_5, Plus(Dyna_10, Stat_10)))
+
+
+
+        Past_11 = FutureValue(hiddenDim4, Stat_11, timeStep=11, needGradient=true)
+        Past2_11 = Delay(hiddenDim4, Stat_11, delayTime=11, needGradient=true)
+        Stat_11 = BFF(Layer_10, hiddenDim4, hiddenDim4)
+        Dyna1_11 = DiagTimes(Ws, Past2_11)
+        Dyna2_11 = DiagTimes(Ws2, Past_11)
+        Dyna_11 = Plus(Dyna1_11,Dyna2_11)
+        Layer_11 = RectifiedLinear(Plus(Dyna_11, Stat_11))
+ 
+        past_12 = FutureValue(hiddenDim4, Stat_12, timeStep=12, needGradient=true)
+        Past2_12 = Delay(hiddenDim4, stat_12, delayTime=12, needGradient=true)
+        Stat_12 = BFF(layer_11, hiddenDim4, hiddenDim4)
+        Dyna1_12 = DiagTimes(Ws, Past2_12) 
+        Dyna2_12 = DiagTimes(Ws2, Past_12)
+        Dyna_12 = Plus(Dyna1_12,Dyna2_12)
+        Layer_12 = RectifiedLinear(Plus(Dyna_12, Stat_12))
+
+        Past_13 = FutureValue(hiddenDim4, Stat_13, timeStep=13, needGradient=true)
+        Past2_13 = Delay(hiddenDim4, stat_13, delayTime=13, needGradient=true)
+        Stat_13 = BFF(layer_12, hiddenDim4, hiddenDim4)
+        Dyna1_13 = DiagTimes(Ws, Past2_13)
+        Dyna2_13 = DiagTimes(Ws2, Past_13)
+        Dyna_13 = Plus(Dyna1_13,Dyna2_13)
+        Layer_13 = RectifiedLinear(Plus(Dyna_13, Stat_13))
+
+        Past_14 = FutureValue(hiddenDim4, Stat_14, timeStep=14, needGradient=true)
+        Past2_14 = Delay(hiddenDim4, stat_14, delayTime=14, needGradient=true)
+        Stat_14 = BFF(layer_13, hiddenDim4, hiddenDim4)
+        Dyna1_14 = DiagTimes(Ws, Past2_14)
+        Dyna2_14 = DiagTimes(Ws2, Past_14)
+        Dyna_14 = Plus(Dyna1_14,Dyna2_14)
+        Layer_14 = RectifiedLinear(Plus(Dyna_14, Stat_14))
+
+        Past_15 = FutureValue(hiddenDim4, Stat_15, timeStep=15, needGradient=true)
+        Past2_15 = Delay(hiddenDim4, stat_15, delayTime=15, needGradient=true)
+        Stat_15 = BFF(layer_14, hiddenDim4, hiddenDim4)
+        Dyna1_15 = DiagTimes(Ws, Past2_15)
+        Dyna2_15 = DiagTimes(Ws2, Past_15)
+        Dyna_15 = Plus(Dyna1_15,Dyna2_15)
+        Layer_15 = RectifiedLinear(Plus(Layer_10, Plus(Dyna_15, Stat_15)))
+
+
+
+        R4 = RBFF(Layer_15, hiddenDim5, hiddenDim4)
+        CE = SMBFF(R4,labelDim,hiddenDim5,labels,tag=Criteria)
+        Err = ErrorPrediction(labels,CE.BFF.FF.P,tag=Eval)
+
+     	# define output (scaled loglikelihood)
+     	logPrior = LogPrior(labels)
+     	ScaledLogLikelihood=Minus(CE.BFF.FF.P,logPrior,tag=Output)
+]
